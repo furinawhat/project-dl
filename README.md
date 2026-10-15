@@ -1,13 +1,5 @@
 # 空洞文件【新点续传】下载器
 
-> Linux 嵌入式系统课程 · 文件 IO 编程作业（AI 协作版）
->
-> **平台**：鲁班猫 RK3566 aarch64（亦可在 x86_64 Linux 编译运行）
-> **知识点**：文件 IO 与系统调用（`open` / `lseek` / `write` / `ftruncate` / `stat` / `sigaction`）
-> **AI 工具链**：DeepSeek API + Claude Code（详见 `docs/AI协作日志.md`）
-
----
-
 ## 一、项目简介
 
 本项目实现一个**基于空洞文件（sparse file）的"新点续传"下载器**。
@@ -33,50 +25,16 @@ sparse-downloader/
 │   ├── sparse_file.c         # 空洞文件操作 (create / write_at / status)
 │   ├── downloader.c          # 下载核心 (SIGINT / 状态持久化 / 续传)
 │   └── main.c                # 命令行入口与分发
-├── tests/
-│   └── run_all.sh            # 自动化测试脚本 (17 项测试)
 └── docs/
     ├── AI协作日志.md          # AI 提示词 + 采纳/拒绝记录
-    ├── AI代码审查.md          # ≥3 处缺陷 + 现象 + 根因 + 修复
-    ├── 测试用例.md            # AI 辅助测试用例
-    └── 运行截图.txt           # 端到端运行输出截图
+    └── 运行截图.png           # 运行输出截图
 ```
 
 ---
 
-## 三、编译
+## 三、用法
 
-### 3.1 本机编译（x86_64）
-
-```bash
-make build
-```
-
-产物：`./sparse-downloader`
-
-编译选项：`-std=c11 -Wall -Wextra -Wpedantic -g -O2`（零警告通过）
-
-### 3.2 交叉编译到鲁班猫 RK3566（aarch64）
-
-```bash
-# 需先安装交叉编译工具链
-sudo apt install gcc-aarch64-linux-gnu
-make cross-aarch64
-```
-
-把生成的 `sparse-downloader` 通过 `scp` 拷贝到鲁班猫板子上即可运行（无外部依赖）。
-
-### 3.3 清理
-
-```bash
-make clean
-```
-
----
-
-## 四、用法
-
-### 4.1 命令一览
+### 3.1 命令一览
 
 ```
 sparse-downloader create   <file> <size>           生成空洞文件 (size 如 128K/1M)
@@ -88,7 +46,7 @@ sparse-downloader verify   <file>                  校验块填充字节是否�
 sparse-downloader help                            显示帮助
 ```
 
-### 4.2 典型工作流（断点续传演示）
+### 3.2 典型工作流（断点续传演示）
 
 ```bash
 # 1) 启动下载（256 KB）
@@ -115,7 +73,7 @@ sparse-downloader help                            显示帮助
 #    [ok]   ✅ 校验通过
 ```
 
-### 4.3 单独测试空洞文件
+### 3.3 单独测试空洞文件
 
 ```bash
 # 创建 256KB 空洞文件
@@ -137,9 +95,9 @@ od -A x -t x1 -j 131072 -N 4 test.bin      # → ca fe ba be
 
 ---
 
-## 五、技术原理
+## 四、技术原理
 
-### 5.1 空洞文件 (Sparse File) 是什么
+### 4.1 空洞文件 (Sparse File) 是什么
 
 Linux 文件系统中，一个文件由 **inode**（元数据）+ 若干**数据块**组成。
 - 普通文件：每段逻辑偏移都有对应的数据块。
@@ -153,7 +111,7 @@ Linux 文件系统中，一个文件由 **inode**（元数据）+ 若干**数据
 
 本项目用 `ftruncate()` 创建初始空洞文件。
 
-### 5.2 status 命令的计算公式
+### 4.2 status 命令的计算公式
 
 ```c
 struct stat st;
@@ -167,7 +125,7 @@ double ratio    = (double)hole / logical * 100;
 
 > ⚠️ 注意：POSIX 规定 `st_blocks` 的单位**永远是 512 字节**，与 `st_blksize`（文件系统块大小，通常 4KB）无关。这是初学者常踩的坑（见 `docs/AI代码审查.md` 缺陷 #2）。
 
-### 5.3 断点续传的状态设计
+### 4.3 断点续传的状态设计
 
 ```
 download_state_t {
@@ -184,7 +142,7 @@ download_state_t {
 
 持久化到 `<file>.resume`，每 4 个块 + 收到 `SIGINT` 时各落盘一次（`fsync` 保证刷盘）。
 
-### 5.4 SIGINT 信号处理
+### 4.4 SIGINT 信号处理
 
 ```c
 static volatile sig_atomic_t g_interrupted = 0;
@@ -210,62 +168,8 @@ while (offset < total_size) {
 
 ---
 
-## 六、测试
-
-```bash
-make test
-```
-
-测试套件覆盖 17 项：
-- help 命令
-- create 空洞文件（验证逻辑大小 + 实际块=0）
-- write 定点写入（不破坏空洞 + 内容正确）
-- status 输出
-- download 全流程
-- verify 校验
-- **断点续传**（中断 → resume → 状态清理 → 数据一致）
-- 非法参数处理
-
-详见 `docs/测试用例.md`。
-
----
-
-## 七、AI 协作
-
-本项目按作业要求融入 5 项 AI 元素，详见：
-
-| 文档 | 内容 |
-| --- | --- |
-| `docs/AI协作日志.md` | ≥5 条 DeepSeek/Claude 提示词 + 采纳/拒绝决策 |
-| `docs/AI代码审查.md` | ≥3 处缺陷：现象 + 根因 + 修复 |
-| `docs/测试用例.md` | AI 辅助生成的测试用例 |
-| `docs/运行截图.txt` | 端到端运行输出 |
-| `README.md` | 本文件（AI 起草 + 学生核对） |
-
----
-
-## 八、平台兼容性
-
-| 平台 | 状态 | 说明 |
-| --- | --- | --- |
-| x86_64 Linux | ✅ 已验证 | 本机开发与测试环境 |
-| aarch64 (RK3566 鲁班猫) | ✅ 可交叉编译 | `make cross-aarch64` |
-| macOS / FreeBSD | ⚠️ 未测试 | `ftruncate`/`stat` 接口兼容，但 `st_blocks` 语义相同 |
-
-代码仅使用 POSIX.1-2008 标准接口，无平台特定依赖。
-
----
-
-## 九、已知限制
+## 五、已知限制
 
 1. 下载内容为**模拟数据**（用块号做填充字节便于 `verify`），未对接真实 HTTP。
 2. `write` 子命令的 hex 参数最长 256 字节（足够演示）。
 3. 续传状态文件未加密，生产环境应考虑校验和/加密。
-
----
-
-## 十、作者
-
-学生姓名：__________  学号：__________  班级：__________
-
-提交时间：第 7 周周五上课前
